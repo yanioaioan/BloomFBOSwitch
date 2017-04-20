@@ -1,0 +1,2 @@
+/home/yioannidis/BloomFBOSwitch/external/SOIL/build/CMakeFiles/SOIL_Dylib.dir
+/home/yioannidis/BloomFBOSwitch/external/SOIL/build/CMakeFiles/SOIL_Static.dir
