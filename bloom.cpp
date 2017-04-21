@@ -18,6 +18,9 @@
 #include <SOIL.h>
 //#include <learnopengl/filesystem.h>
 
+//SET USE_CANCEL_OUT_testpingpong2_shader to 1 to see the cancel out of the blurring effect whilst ping-ponging between fbos
+#define USE_CANCEL_OUT_testpingpong2_shader 0
+
 // Properties
 const GLuint SCR_WIDTH = 800, SCR_HEIGHT = 600;
 
@@ -260,6 +263,8 @@ int main()
         for (GLuint i = 0; i < amount; i++)
         {
 
+#if USE_CANCEL_OUT_testpingpong2_shader
+
             if(!horizontal)
             {
                 testpingpong2.Use();
@@ -268,7 +273,7 @@ int main()
             {
                 shaderBlur.Use();
             }
-
+#endif
             //at first iteration bind pingpongFBO[1], then bind pingpongFBO[0], then bind pingpongFBO[1]
             glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[horizontal]);
             glUniform1i(glGetUniformLocation(shaderBlur.Program, "horizontal"), horizontal);
