@@ -50,7 +50,9 @@ OBJECTS_DIR   = ./
 
 SOURCES       = bloom.cpp 
 OBJECTS       = bloom.o
-DIST          = ../.qmake.stash \
+DIST          = testpingpong2.vs \
+		testpingpong2.fs \
+		../.qmake.stash \
 		deployment.pri \
 		BloomFBOSwitch.pro  bloom.cpp
 QMAKE_TARGET  = BloomFBOSwitch

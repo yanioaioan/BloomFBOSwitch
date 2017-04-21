@@ -86,6 +86,8 @@ int main()
     Shader shader("bloom.vs", "bloom.frag");
     Shader shaderLight("bloom.vs", "light_box.frag");
     Shader shaderBlur("blur.vs", "blur.frag");
+    Shader testpingpong2("testpingpong2.vs", "testpingpong2.fs");
+
     Shader shaderBloomFinal("bloom_final.vs", "bloom_final.frag");
 
 	// Set samplers
@@ -194,7 +196,8 @@ int main()
 				glUniform3fv(glGetUniformLocation(shader.Program, ("lights[" + std::to_string(i) + "].Position").c_str()), 1, &lightPositions[i][0]);
 				glUniform3fv(glGetUniformLocation(shader.Program, ("lights[" + std::to_string(i) + "].Color").c_str()), 1, &lightColors[i][0]);
 			}
-			glUniform3fv(glGetUniformLocation(shader.Program, "viewPos"), 1, &camera.Position[0]);
+
+            glUniform3fv(glGetUniformLocation(shader.Program, "viewPos"), 1, &camera.Position[0]);
 			// - create one large cube that acts as the floor
             model = glm::mat4();
             model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0));
@@ -256,6 +259,16 @@ int main()
         shaderBlur.Use();
         for (GLuint i = 0; i < amount; i++)
         {
+
+            if(!horizontal)
+            {
+                testpingpong2.Use();
+            }
+            else
+            {
+                shaderBlur.Use();
+            }
+
             //at first iteration bind pingpongFBO[1], then bind pingpongFBO[0], then bind pingpongFBO[1]
             glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[horizontal]);
             glUniform1i(glGetUniformLocation(shaderBlur.Program, "horizontal"), horizontal);

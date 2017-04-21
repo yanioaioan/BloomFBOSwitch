@@ -18,3 +18,7 @@ OTHER_FILES += *.vs \
 
 INCLUDEPATH += . ./includes ./external/SOIL/src
 #/usr/include $$NGLPATH/include ../../../common/include $$IGLPATH/include  $$EIGENPATH $$NOISEINCPATH
+
+DISTFILES += \
+    testpingpong2.vs \
+    testpingpong2.fs

@@ -26,7 +26,7 @@ const GLfloat SENSITIVTY =  0.25f;
 const GLfloat ZOOM       =  45.0f;
 
 
-// An abstract camera class that processes input and calculates the corresponding Eular Angles, Vectors and Matrices for use in OpenGL
+// An abstract camera class that processes input and calculates the corresponding Euler Angles, Vectors and Matrices for use in OpenGL
 class Camera
 {
 public:
@@ -36,7 +36,7 @@ public:
     glm::vec3 Up;
     glm::vec3 Right;
     glm::vec3 WorldUp;
-    // Eular Angles
+    // Euler Angles
     GLfloat Yaw;
     GLfloat Pitch;
     // Camera options
@@ -63,7 +63,7 @@ public:
         this->updateCameraVectors();
     }
 
-    // Returns the view matrix calculated using Eular Angles and the LookAt Matrix
+    // Returns the view matrix calculated using Euler Angles and the LookAt Matrix
     glm::mat4 GetViewMatrix()
     {
         return glm::lookAt(this->Position, this->Position + this->Front, this->Up);
@@ -101,7 +101,7 @@ public:
                 this->Pitch = -89.0f;
         }
 
-        // Update Front, Right and Up Vectors using the updated Eular angles
+        // Update Front, Right and Up Vectors using the updated Euler angles
         this->updateCameraVectors();
     }
 
@@ -117,7 +117,7 @@ public:
     }
 
 private:
-    // Calculates the front vector from the Camera's (updated) Eular Angles
+    // Calculates the front vector from the Camera's (updated) Euler Angles
     void updateCameraVectors()
     {
         // Calculate the new Front vector
