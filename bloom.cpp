@@ -162,7 +162,7 @@ int main()
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // We clamp to the edge as the blur filter would otherwise sample repeated texture values!
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongColorbuffers[i], 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongColorbuffers[i], 0);
 		// Also check if framebuffers are complete (no need for depth buffer)
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 			std::cout << "Framebuffer not complete!" << std::endl;
@@ -191,7 +191,7 @@ int main()
 			shader.Use();
 			glUniformMatrix4fv(glGetUniformLocation(shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 			glUniformMatrix4fv(glGetUniformLocation(shader.Program, "view"), 1, GL_FALSE, glm::value_ptr(view));
-			glActiveTexture(GL_TEXTURE0);
+            glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, woodTexture);
 			// - set lighting uniforms
 			for (GLuint i = 0; i < lightPositions.size(); i++)
@@ -284,7 +284,7 @@ int main()
             //ii)next bind 1st pingpongFBO[0] bind what's  coming out of layout the other framebuffer;
 
 
-            //at first USE colorBuffers[1], then the texture of pingpongColorbuffers[1], then bind pingpongColorbuffers[0]
+            //at first USE colorBuffers[1] (because the brightness is attached to the layout 1), then the texture of pingpongColorbuffers[1], then bind pingpongColorbuffers[0]
             glBindTexture(GL_TEXTURE_2D, first_iteration ? colorBuffers[1] : pingpongColorbuffers[!horizontal]);
 
             //colorBuffers[0] is the FragColor of bloom.frag
