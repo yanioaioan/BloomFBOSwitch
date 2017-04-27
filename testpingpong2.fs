@@ -21,7 +21,7 @@ void main()
          {
              for(int i = 1; i < 5; ++i)
              {
-                //THE -= here will cancel the previous buffer blurred result
+                //THE '-=' here will cancel the previous buffer blurred result
 
                 result -= texture(image, TexCoords + vec2(tex_offset.x * i, 0.0)).rgb * weight[i];
                 result -= texture(image, TexCoords - vec2(tex_offset.x * i, 0.0)).rgb * weight[i];
@@ -30,7 +30,7 @@ void main()
          else
          {
 
-               //THE -= here will cancel the previous buffer blurred result
+               //THE '-=' here will cancel the previous buffer blurred result
 
              for(int i = 1; i < 5; ++i)
              {

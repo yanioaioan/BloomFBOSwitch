@@ -31,7 +31,7 @@ public:
 
     /*  Functions   */
     // Constructor, expects a filepath to a 3D model.
-    Model(string const & path, bool gamma = false) : gammaCorrection(gamma)
+    Model(const GLchar * path, bool gamma = false) : gammaCorrection(gamma)
     {
         this->loadModel(path);
     }

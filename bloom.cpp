@@ -45,6 +45,54 @@ GLfloat lastFrame = 0.0f;
 GLboolean bloom = true; // Change with 'Space'
 GLfloat exposure = 1.0f; // Change with Q and E
 
+
+
+/// @brief our texture id used by the FBO
+//----------------------------------------------------------------------------------------------------------------------
+GLuint m_textureID;
+//----------------------------------------------------------------------------------------------------------------------
+/// @brief our FBO id used by the FBO
+//----------------------------------------------------------------------------------------------------------------------
+GLuint m_fboID;
+void createFramebufferObject()
+{
+
+  // Try to use a texture depth component
+  glGenTextures(1, &m_textureID);
+  glBindTexture(GL_TEXTURE_2D, m_textureID);
+  //glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+  //glTexParameteri(GL_TEXTURE_2D, GL_DEPTH_TEXTURE_MODE, GL_LUMINANCE);
+  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_R_TO_TEXTURE);
+
+  glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+  glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+
+  glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SCR_WIDTH, SCR_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  // create our FBO
+  glGenFramebuffers(1, &m_fboID);
+  glBindFramebuffer(GL_FRAMEBUFFER, m_fboID);
+  // disable the colour and read buffers as we only want depth
+  glDrawBuffer(GL_NONE);
+  glReadBuffer(GL_NONE);
+
+  // attach our texture to the FBO
+
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,GL_TEXTURE_2D, m_textureID, 0);
+
+  // switch back to window-system-provided framebuffer
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+static float m_lightAngle;
+
 // The MAIN function, from here we start our application and run our Game loop
 int main()
 {
@@ -90,6 +138,20 @@ int main()
     Shader shaderLight("bloom.vs", "light_box.frag");
     Shader shaderBlur("blur.vs", "blur.frag");
     Shader testpingpong2("testpingpong2.vs", "testpingpong2.fs");
+    Shader shaderShadow("ShadowVert.vs", "ShadowFrag.frag");
+    // now create our FBO and texture
+    createFramebufferObject();
+    // we need to enable depth testing
+    glEnable(GL_DEPTH_TEST);
+    // set the depth comparison mode
+    glDepthFunc(GL_LEQUAL);
+    // set the bg to black
+    glClearColor(0,0,0,1.0f);
+    // enable face culling this will be switch to front and back when
+    // rendering shadow or scene
+    glEnable(GL_CULL_FACE);
+    glPolygonOffset(1.1f,4);
+
 
     Shader shaderBloomFinal("bloom_final.vs", "bloom_final.frag");
 
@@ -182,26 +244,55 @@ int main()
         glfwPollEvents();
         Do_Movement();
 
-		// 1. Render scene into floating point framebuffer
-		glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			glm::mat4 projection = glm::perspective(camera.Zoom, (GLfloat)SCR_WIDTH / (GLfloat)SCR_HEIGHT, 0.1f, 100.0f);
-			glm::mat4 view = camera.GetViewMatrix();
-			glm::mat4 model;
-			shader.Use();
-			glUniformMatrix4fv(glGetUniformLocation(shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-			glUniformMatrix4fv(glGetUniformLocation(shader.Program, "view"), 1, GL_FALSE, glm::value_ptr(view));
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        //----------------------------------------------------------------------------------------------------------------------
+        // Pass 1 render our Depth texture to the FBO
+        //----------------------------------------------------------------------------------------------------------------------
+        // enable culling
+        glEnable(GL_CULL_FACE);
+
+        // bind the FBO and render offscreen to the texture
+        glBindFramebuffer(GL_FRAMEBUFFER,m_fboID);
+        // bind the texture object to 0 (off ) - to the default texture
+        glBindTexture(GL_TEXTURE_2D,0);
+        // we need to render to the same size as the texture to avoid
+        // distortions
+        glViewport(0,0,SCR_WIDTH,SCR_HEIGHT);
+
+        // Clear previous frame values
+        glClear( GL_DEPTH_BUFFER_BIT);
+        // as we are only rendering depth turn off the colour / alpha
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+
+        // render only the back faces so we don't get too much self shadowing
+        glCullFace(GL_FRONT);
+        // draw the scene from the POV of the light using the function we need
+//        drawScene(std::bind(&NGLScene::loadToLightPOVShader,this));
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        //Draw Scene
+
+        // 1. Render scene into floating point framebuffer
+//		glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glm::mat4 projection = glm::perspective(camera.Zoom, (GLfloat)SCR_WIDTH / (GLfloat)SCR_HEIGHT, 0.1f, 100.0f);
+            glm::mat4 view = camera.GetViewMatrix();
+            glm::mat4 model;
+            shader.Use();
+            glUniformMatrix4fv(glGetUniformLocation(shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+            glUniformMatrix4fv(glGetUniformLocation(shader.Program, "view"), 1, GL_FALSE, glm::value_ptr(view));
             glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, woodTexture);
-			// - set lighting uniforms
-			for (GLuint i = 0; i < lightPositions.size(); i++)
-			{
-				glUniform3fv(glGetUniformLocation(shader.Program, ("lights[" + std::to_string(i) + "].Position").c_str()), 1, &lightPositions[i][0]);
-				glUniform3fv(glGetUniformLocation(shader.Program, ("lights[" + std::to_string(i) + "].Color").c_str()), 1, &lightColors[i][0]);
-			}
+            glBindTexture(GL_TEXTURE_2D, woodTexture);
+            // - set lighting uniforms
+            for (GLuint i = 0; i < lightPositions.size(); i++)
+            {
+                glUniform3fv(glGetUniformLocation(shader.Program, ("lights[" + std::to_string(i) + "].Position").c_str()), 1, &lightPositions[i][0]);
+                glUniform3fv(glGetUniformLocation(shader.Program, ("lights[" + std::to_string(i) + "].Color").c_str()), 1, &lightColors[i][0]);
+            }
 
             glUniform3fv(glGetUniformLocation(shader.Program, "viewPos"), 1, &camera.Position[0]);
-			// - create one large cube that acts as the floor
+            // - create one large cube that acts as the floor
             model = glm::mat4();
             model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0));
             model = glm::scale(model, glm::vec3(25.0f, 1.0f, 25.0f));
@@ -254,68 +345,245 @@ int main()
                 glUniform3fv(glGetUniformLocation(shaderLight.Program, "lightColor"), 1, &lightColors[i][0]);
                 RenderCube();
             }
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-        // 2. Blur bright fragments w/ two-pass Gaussian Blur
-        GLboolean horizontal = true, first_iteration = true;
-        GLuint amount = 10;
-        shaderBlur.Use();
-        for (GLuint i = 0; i < amount; i++)
-        {
-
-#if USE_CANCEL_OUT_testpingpong2_shader
-
-            if(!horizontal)
-            {
-                testpingpong2.Use();
-            }
-            else
-            {
-                shaderBlur.Use();
-            }
-#endif
-            //at first iteration bind pingpongFBO[1], then bind pingpongFBO[0], then bind pingpongFBO[1]
-            glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[horizontal]);
-            glUniform1i(glGetUniformLocation(shaderBlur.Program, "horizontal"), horizontal);
-
-            // bind texture of other framebuffer (or scene if first iteration)
-
-            //i)at first bind 2nd pingpongFBO[1] bind brightness coming out of layout (location = 1) out vec4 BrightColor; --> hence use "colorBuffers[1]"
-            //ii)next bind 1st pingpongFBO[0] bind what's  coming out of layout the other framebuffer;
-
-
-            //at first USE colorBuffers[1] (because the brightness is attached to the layout 1), then the texture of pingpongColorbuffers[1], then bind pingpongColorbuffers[0]
-            glBindTexture(GL_TEXTURE_2D, first_iteration ? colorBuffers[1] : pingpongColorbuffers[!horizontal]);
-
-            //colorBuffers[0] is the FragColor of bloom.frag
-            //colorBuffers[1] is the BrightColor of bloom.frag (TRY REPLACING colorBuffers[1] WITH colorBuffers[0]) AT glBindTexture CALL AND THE WHOLE SCENE WOULD BE BLURRED
-            // pingpongColorbuffers[0] is 1 extra buffer for rendering
-            // pingpongColorbuffers[1] is a 2nd extra buffer for rendering
-
-//            glBindTexture(GL_TEXTURE_2D, colorBuffers[0]);
-//            glBindTexture(GL_TEXTURE_2D, colorBuffers[1]);
-//            glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[0]);
-//            glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[1]);
-
-
-            RenderQuad();
-            horizontal = !horizontal;
-            if (first_iteration)
-                first_iteration = false;
-        }
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-        // 2. Now render floating point color buffer to 2D quad and tonemap HDR colors to default framebuffer's (clamped) color range
+
+
+        //Now 2nd pass
+        //----------------------------------------------------------------------------------------------------------------------
+        // Pass two use the texture
+        // now we have created the texture for shadows render the scene properly
+        //----------------------------------------------------------------------------------------------------------------------
+        // go back to our normal framebuffer
+        glBindFramebuffer(GL_FRAMEBUFFER,0);
+        // set the viewport to the screen dimensions
+        glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+        // enable colour rendering again (as we turned it off earlier)
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        // clear the screen
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        shaderBloomFinal.Use();
+
+        // bind the shadow texture
+        glBindTexture(GL_TEXTURE_2D,m_textureID);
+
+        // we need to generate the mip maps each time we bind
+      //  glGenerateMipmap(GL_TEXTURE_2D);
+
+        // now only cull back faces
+        glDisable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        // render our scene with the shadow shader
+//        drawScene(std::bind(&NGLScene::loadMatricesToShadowShader,this));
+        //----------------------------------------------------------------------------------------------------------------------
+        // this draws the debug texture on the quad
+        //----------------------------------------------------------------------------------------------------------------------
+
+
+        //Draw Scene
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        projection = glm::perspective(camera.Zoom, (GLfloat)SCR_WIDTH / (GLfloat)SCR_HEIGHT, 0.1f, 100.0f);
+        view = camera.GetViewMatrix();
+        glm::mat4 normalMatrix=view*model;
+        normalMatrix=glm::inverse(normalMatrix);
+
+        shaderShadow.Use();
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MV"), 1, GL_FALSE, glm::value_ptr(view*model));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MVP"), 1, GL_FALSE, glm::value_ptr(projection*view*model));
+        glUniformMatrix3fv(glGetUniformLocation(shaderShadow.Program, "normalMatrix"), 1, GL_FALSE, glm::value_ptr(normalMatrix));
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, colorBuffers[0]);//bind the actual scene not the blurred stuff
-//        //glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[!horizontal]);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[0]);//use one of the 2 pingpongColorbuffers, as each one was outputing its result back to the other
-        glUniform1i(glGetUniformLocation(shaderBloomFinal.Program, "bloom"), bloom);
-        glUniform1f(glGetUniformLocation(shaderBloomFinal.Program, "exposure"), exposure);
-        RenderQuad();
+        glBindTexture(GL_TEXTURE_2D, woodTexture);
+
+        // - set lighting uniforms
+
+
+
+
+      // change the light angle
+      m_lightAngle+=0.05;
+
+      // now set this value and load to the shader
+
+
+      Camera tmpLightcamera(glm::vec3((8.0*cos(m_lightAngle), 4.0 ,8.0*sin(m_lightAngle))));
+      view = tmpLightcamera.GetViewMatrix();
+
+//        for (GLuint i = 0; i < lightPositions.size(); i++)
+        {
+            glUniform3fv(glGetUniformLocation(shaderShadow.Program, ("LightPosition")), 1, glm::value_ptr(glm::vec3((8.0*cos(m_lightAngle), 4.0 ,8.0*sin(m_lightAngle)))));
+            glUniform4fv(glGetUniformLocation(shaderShadow.Program, ("inColour" )), 1, glm::value_ptr(glm::vec4(1,1,1,0)));
+        }
+
+        glm::mat4 bias;
+        glm::scale(bias, glm::vec3(0.5f,0.5f,0.5f));
+        glm::translate(bias, glm::vec3(0.5f,0.5f,0.5f));
+        glm::mat4 textureMatrix = bias*projection*view*model;
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "textureMatrix"), 1, GL_FALSE, glm::value_ptr(textureMatrix));
+
+
+      view = camera.GetViewMatrix();
+
+        glUniform3fv(glGetUniformLocation(shaderShadow.Program, "viewPos"), 1, &camera.Position[0]);
+//         - create one large cube that acts as the floor
+        model = glm::mat4();
+        model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0));
+        model = glm::scale(model, glm::vec3(25.0f, 1.0f, 25.0f));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "model"), 1, GL_FALSE, glm::value_ptr(model));
+
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MV"), 1, GL_FALSE, glm::value_ptr(view*model));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MVP"), 1, GL_FALSE, glm::value_ptr(projection*view*model));
+        RenderCube();
+
+        glActiveTexture(GL_TEXTURE0);
+
+
+//        //working showing floor cube
+//        shader.Use();
+//                    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+//                    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "view"), 1, GL_FALSE, glm::value_ptr(view));
+//                    glActiveTexture(GL_TEXTURE0);
+//                    glBindTexture(GL_TEXTURE_2D, woodTexture);
+//                    // - set lighting uniforms
+//                    for (GLuint i = 0; i < lightPositions.size(); i++)
+//                    {
+//                        glUniform3fv(glGetUniformLocation(shader.Program, ("lights[" + std::to_string(i) + "].Position").c_str()), 1, &lightPositions[i][0]);
+//                        glUniform3fv(glGetUniformLocation(shader.Program, ("lights[" + std::to_string(i) + "].Color").c_str()), 1, &lightColors[i][0]);
+//                    }
+
+//                    glUniform3fv(glGetUniformLocation(shader.Program, "viewPos"), 1, &camera.Position[0]);
+//                    // - create one large cube that acts as the floor
+//                    model = glm::mat4();
+//                    model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0));
+//                    model = glm::scale(model, glm::vec3(25.0f, 1.0f, 25.0f));
+//                    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "model"), 1, GL_FALSE, glm::value_ptr(model));
+//                    RenderCube();
+
+
+        //working showing floor cube
+        // - then create multiple cubes as the scenery
+        glBindTexture(GL_TEXTURE_2D, containerTexture);
+        model = glm::mat4();
+        model = glm::translate(model, glm::vec3(0.0f, 1.5f, 0.0));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "model"), 1, GL_FALSE, glm::value_ptr(model));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MV"), 1, GL_FALSE, glm::value_ptr(view*model));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MVP"), 1, GL_FALSE, glm::value_ptr(projection*view*model));
+        RenderCube();
+        model = glm::mat4();
+        model = glm::translate(model, glm::vec3(2.0f, 0.0f, 1.0));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "model"), 1, GL_FALSE, glm::value_ptr(model));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MV"), 1, GL_FALSE, glm::value_ptr(view*model));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MVP"), 1, GL_FALSE, glm::value_ptr(projection*view*model));
+        RenderCube();
+        model = glm::mat4();
+        model = glm::translate(model, glm::vec3(-1.0f, -1.0f, 2.0));
+        model = glm::rotate(model, 60.0f, glm::normalize(glm::vec3(1.0, 0.0, 1.0)));
+        model = glm::scale(model, glm::vec3(2.0));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "model"), 1, GL_FALSE, glm::value_ptr(model));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MV"), 1, GL_FALSE, glm::value_ptr(view*model));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MVP"), 1, GL_FALSE, glm::value_ptr(projection*view*model));
+        RenderCube();
+        model = glm::mat4();
+        model = glm::translate(model, glm::vec3(0.0f, 2.7f, 4.0));
+        model = glm::rotate(model, 23.0f, glm::normalize(glm::vec3(1.0, 0.0, 1.0)));
+        model = glm::scale(model, glm::vec3(2.5));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "model"), 1, GL_FALSE, glm::value_ptr(model));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MV"), 1, GL_FALSE, glm::value_ptr(view*model));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MVP"), 1, GL_FALSE, glm::value_ptr(projection*view*model));
+        RenderCube();
+        model = glm::mat4();
+        model = glm::translate(model, glm::vec3(-2.0f, 1.0f, -3.0));
+        model = glm::rotate(model, 124.0f, glm::normalize(glm::vec3(1.0, 0.0, 1.0)));
+        model = glm::scale(model, glm::vec3(2.0));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "model"), 1, GL_FALSE, glm::value_ptr(model));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MV"), 1, GL_FALSE, glm::value_ptr(view*model));
+        glUniformMatrix4fv(glGetUniformLocation(shaderShadow.Program, "MVP"), 1, GL_FALSE, glm::value_ptr(projection*view*model));
+        RenderCube();
+//        RenderCube();
+        model = glm::mat4();
+        model = glm::translate(model, glm::vec3(-3.0f, 0.0f, 0.0));
+        glUniformMatrix4fv(glGetUniformLocation(shader.Program, "model"), 1, GL_FALSE, glm::value_ptr(model));
+//        RenderCube();
+        // - finally show all the light sources as bright cubes
+//        shaderLight.Use();
+//        glUniformMatrix4fv(glGetUniformLocation(shaderLight.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+//        glUniformMatrix4fv(glGetUniformLocation(shaderLight.Program, "view"), 1, GL_FALSE, glm::value_ptr(view));
+
+//        for (GLuint i = 0; i < lightPositions.size(); i++)
+//        {
+//            model = glm::mat4();
+//            model = glm::translate(model, glm::vec3(lightPositions[i]));
+//            model = glm::scale(model, glm::vec3(0.5f));
+//            glUniformMatrix4fv(glGetUniformLocation(shaderLight.Program, "model"), 1, GL_FALSE, glm::value_ptr(model));
+//            glUniform3fv(glGetUniformLocation(shaderLight.Program, "lightColor"), 1, &lightColors[i][0]);
+//            RenderCube();
+//        }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+
+
+
+
+
+
+//        // 2. Blur bright fragments w/ two-pass Gaussian Blur
+//        GLboolean horizontal = true, first_iteration = true;
+//        GLuint amount = 10;
+//        shaderBlur.Use();
+//        for (GLuint i = 0; i < amount; i++)
+//        {
+
+//#if USE_CANCEL_OUT_testpingpong2_shader
+
+//            if(!horizontal)
+//            {
+//                testpingpong2.Use();
+//            }
+//            else
+//            {
+//                shaderBlur.Use();
+//            }
+//#endif
+//            //at first iteration bind pingpongFBO[1], then bind pingpongFBO[0], then bind pingpongFBO[1]
+//            glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[horizontal]);
+//            glUniform1i(glGetUniformLocation(shaderBlur.Program, "horizontal"), horizontal);
+
+//            // bind texture of other framebuffer (or scene if first iteration)
+
+//            //i)at first bind 2nd pingpongFBO[1] bind brightness coming out of layout (location = 1) out vec4 BrightColor; --> hence use "colorBuffers[1]"
+//            //ii)next bind 1st pingpongFBO[0] bind what's  coming out of layout the other framebuffer;
+
+
+//            //at first USE colorBuffers[1] (because the brightness is attached to the layout 1), then the texture of pingpongColorbuffers[1], then bind pingpongColorbuffers[0]
+//            glBindTexture(GL_TEXTURE_2D, first_iteration ? colorBuffers[1] : pingpongColorbuffers[!horizontal]);
+
+//            //colorBuffers[0] is the FragColor of bloom.frag
+//            //colorBuffers[1] is the BrightColor of bloom.frag (TRY REPLACING colorBuffers[1] WITH colorBuffers[0]) AT glBindTexture CALL AND THE WHOLE SCENE WOULD BE BLURRED
+//            // pingpongColorbuffers[0] is 1 extra buffer for rendering
+//            // pingpongColorbuffers[1] is a 2nd extra buffer for rendering
+
+////            glBindTexture(GL_TEXTURE_2D, colorBuffers[0]);
+////            glBindTexture(GL_TEXTURE_2D, colorBuffers[1]);
+////            glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[0]);
+////            glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[1]);
+
+
+//            RenderQuad();
+//            horizontal = !horizontal;
+//            if (first_iteration)
+//                first_iteration = false;
+//        }
+//        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+//        // 2. Now render floating point color buffer to 2D quad and tonemap HDR colors to default framebuffer's (clamped) color range
+//        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+//        shaderBloomFinal.Use();
+//        glActiveTexture(GL_TEXTURE0);
+//        glBindTexture(GL_TEXTURE_2D, colorBuffers[0]);//bind the actual scene not the blurred stuff
+////        //glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[!horizontal]);
+//        glActiveTexture(GL_TEXTURE1);
+//        glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[0]);//use one of the 2 pingpongColorbuffers, as each one was outputing its result back to the other
+//        glUniform1i(glGetUniformLocation(shaderBloomFinal.Program, "bloom"), bloom);
+//        glUniform1f(glGetUniformLocation(shaderBloomFinal.Program, "exposure"), exposure);
+//        RenderQuad();
 
 
 		// Swap the buffers
@@ -528,3 +796,118 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
 	camera.ProcessMouseScroll(yoffset);
 }
+
+
+
+
+
+
+
+
+
+
+
+glViewport(0, 0, width() * devicePixelRatio(), height() * devicePixelRatio());
+glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
+ glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+shader->use("GeometryTesellation");
+         m_transform.reset();
+         m_transform.setPosition(0.0f,1.0f,0.0f);
+         m_vaoMesh->bind();
+         loadToGeometryMatrices();
+         m_vaoMesh->draw();
+ glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebufferObject());
+
+  // 2. generate SSAO texture
+  // --------------------------------------------------------------------------------
+glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
+  glClear(GL_COLOR_BUFFER_BIT);
+  glViewport(0, 0, width() * devicePixelRatio(), height() * devicePixelRatio());
+shader->use("ssaoShader");
+ GLint pidSSAO = shader->getProgramID("ssaoShader");
+ // Send kernel + rotation
+ for (unsigned int i = 0; i < 64; ++i)
+ {
+     setVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
+         //glUniform3fv( glGetUniformLocation(pidSSAO, ( "samples["+ std::to_string(i)+"]").c_str() ), ssaoKernel.size(),reinterpret_cast<GLfloat *>(&ssaoKernel[0]));
+ }
+              glActiveTexture(GL_TEXTURE10);
+              glBindTexture(GL_TEXTURE_2D, gPosition);
+              glGenerateMipmap(GL_TEXTURE_2D);
+              glActiveTexture(GL_TEXTURE11);
+              glBindTexture(GL_TEXTURE_2D, gNormal);
+               glGenerateMipmap(GL_TEXTURE_2D);
+              glActiveTexture(GL_TEXTURE12);
+              glBindTexture(GL_TEXTURE_2D, noiseTexture);
+               glGenerateMipmap(GL_TEXTURE_2D);
+              loadMatricesToShader();
+              prim->draw("SSAOplane");
+ glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebufferObject());
+ // 3. blur SSAO texture to remove noise
+     // ------------------------------------
+glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlurFBO);
+     glClear(GL_COLOR_BUFFER_BIT);
+     glViewport(0, 0, width() * devicePixelRatio(), height() * devicePixelRatio());
+shader->use("blur");
+                 glActiveTexture(GL_TEXTURE10);
+                 glBindTexture(GL_TEXTURE_2D, ssaoBlurFBO);
+                 glGenerateMipmap(GL_TEXTURE_2D);
+                 glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
+                 loadMatricesBASE();
+                 prim->draw("SSAOplane");
+ glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebufferObject());
+     // 4. lighting pass: traditional deferred Blinn-Phong lighting with added screen-space ambient occlusion
+     // -----------------------------------------------------------------------------------------------------
+     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+     glViewport(0, 0, width() * devicePixelRatio(), height() * devicePixelRatio());
+shader->use("lightShader");
+     ngl::Vec3 lightColor = ngl::Vec3(0.2, 0.2, 0.7);
+     ngl::Vec3 lightPosView = ngl::Mat3(m_cam.getViewMatrix()) * ngl::Vec3(m_lightPosition);
+     shader->setUniform("light.Position", lightPosView);
+     shader->setUniform("light.Color", lightColor);
+     // Update attenuation parameters
+     const float linear    = 0.09;
+     const float quadratic = 0.032;
+     shader->setUniform("light.Linear",linear );
+     shader->setUniform("light.Quadratic",quadratic );
+     glActiveTexture(GL_TEXTURE10);
+     glBindTexture(GL_TEXTURE_2D, gPosition);
+     glGenerateMipmap(GL_TEXTURE_2D);
+     glActiveTexture(GL_TEXTURE11);
+          glGenerateMipmap(GL_TEXTURE_2D);
+     glBindTexture(GL_TEXTURE_2D, gNormal);
+         glGenerateMipmap(GL_TEXTURE_2D);
+     glActiveTexture(GL_TEXTURE12);
+     glBindTexture(GL_TEXTURE_2D, gAlbedo);
+         glGenerateMipmap(GL_TEXTURE_2D);
+     glActiveTexture(GL_TEXTURE14); // add extra SSAO texture to lighting pass
+     glBindTexture(GL_TEXTURE_2D, ssaoColorBufferBlur);
+     loadMatricesToShader();
+     prim->draw("SSAOplane");
+ glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebufferObject());
+ glBindTexture(GL_TEXTURE_2D, 0);
+ m_vaoMesh->unbind();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
